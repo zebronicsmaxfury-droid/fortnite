@@ -20,8 +20,9 @@
     If you must change something, edit the param block below.
 
     Extra switches:
-      -Once      run a single sync cycle then exit
-      -OneWay    disable folder -> repo (old one-way behaviour)
+      -Once        run a single sync cycle then exit
+      -OneWay      disable folder -> repo (old one-way behaviour)
+      -NoKeepFiles do not auto-create .gitkeep for empty folders
 #>
 
 [CmdletBinding()]
@@ -38,6 +39,7 @@ param(
     [string]$CommitMessage = "Auto-sync from PC",
     [bool]  $AllowDelete = $true,
     [string[]]$Ignore = @('*.tmp','*.temp','~*','*~','*.swp','*.swo','*.bak','*.orig','.DS_Store','Thumbs.db'),
+    [switch]$NoKeepFiles,
     [switch]$OneWay,
     [switch]$Once
 )
@@ -126,6 +128,69 @@ function Get-TreeHashes {
         }
     }
     return $map
+}
+
+function Test-DirectoryHasFiles {
+    param([string]$Dir)
+
+    $stack = New-Object System.Collections.Stack
+    $stack.Push($Dir)
+    while ($stack.Count -gt 0) {
+        $d = $stack.Pop()
+        try {
+            $children = Get-ChildItem -LiteralPath $d -Force -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+        foreach ($child in $children) {
+            if ($child.PSIsContainer) {
+                if ($child.Name -ne '.git') { $stack.Push($child.FullName) }
+            }
+            elseif (-not (Test-Ignored $child.Name)) {
+                return $true
+            }
+        }
+    }
+    return $false
+}
+
+# Git cannot store an empty directory. So that brand-new empty folders still
+# sync, drop a .gitkeep file inside every folder that contains no real files
+# (deepest folders first). Disable with -NoKeepFiles.
+function Add-KeepFiles {
+    param([string]$Root, [string]$KeepName = '.gitkeep')
+
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+
+    $entries = @()
+    $stack = New-Object System.Collections.Stack
+    $stack.Push($Root)
+    while ($stack.Count -gt 0) {
+        $dir = $stack.Pop()
+        try {
+            $children = Get-ChildItem -LiteralPath $dir -Force -ErrorAction Stop
+        }
+        catch {
+            continue
+        }
+        foreach ($child in $children) {
+            if (-not $child.PSIsContainer) { continue }
+            if ($child.Name -eq '.git') { continue }
+            $depth = @($child.FullName.ToCharArray() | Where-Object { $_ -eq '\' -or $_ -eq '/' }).Count
+            $entries += [pscustomobject]@{ Path = $child.FullName; Depth = $depth }
+            $stack.Push($child.FullName)
+        }
+    }
+
+    foreach ($entry in ($entries | Sort-Object Depth -Descending)) {
+        if (Test-DirectoryHasFiles $entry.Path) { continue }
+        $keep = Join-Path $entry.Path $KeepName
+        if (-not (Test-Path -LiteralPath $keep)) {
+            Set-Content -LiteralPath $keep -Value '' -Encoding ASCII
+            Write-Log ("PC -> REPO: empty folder '{0}' -> added {1}" -f (Split-Path -Leaf $entry.Path), $KeepName) 'PC'
+        }
+    }
 }
 
 function ConvertTo-OsPath {
@@ -362,6 +427,8 @@ while ($true) {
         # B. PC -> repo : scan the target for local edits and push them
         # ------------------------------------------------------------------
         if (-not $OneWay) {
+            if (-not $NoKeepFiles) { Add-KeepFiles $Target }
+
             $targetHashes = Get-TreeHashes $Target
 
             $toPush   = @{}

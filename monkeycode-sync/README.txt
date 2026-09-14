@@ -85,11 +85,28 @@ block. Edit the value after the "=" sign, keep the quotes:
   Ignore   = skip temp files    -> *.tmp, *~, *.swp, etc.
 
 You can also run with switches:
-  -OneWay   : turns OFF "PC -> repo" (old one-way behaviour)
-  -Once     : runs a single sync cycle, then exits
+  -OneWay      : turns OFF "PC -> repo" (old one-way behaviour)
+  -Once        : runs a single sync cycle, then exits
+  -NoKeepFiles : do not auto-create .gitkeep in empty folders
 
 Example: to land files in a different folder, change the line to:
   [string]$Target = "C:\Users\hxh\Desktop\my project"
+
+
+EMPTY FOLDERS
+-------------
+Git cannot store a folder that has no files in it. If you create a new,
+empty folder on your PC, the sync would normally have nothing to push.
+
+To make empty folders sync anyway, the tool automatically drops a tiny
+placeholder file named ".gitkeep" inside any folder that contains no
+files. That is normal and safe - many projects do this. The folder then
+appears on the other side (with the .gitkeep file inside it).
+
+So if you create a folder and want it to show up, either:
+  - put any file inside it yourself, or
+  - just let the tool add the .gitkeep automatically (default).
+To turn this off, run with -NoKeepFiles.
 
 
 IF BOTH SIDES CHANGE THE SAME FILE
