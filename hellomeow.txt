@@ -1,0 +1,157 @@
+TASK: Fix truck floating parts + rework Training Mode (vehicles line-up, killable dummies, moving dummies)
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! IMPORTANT: READ THIS FIRST — STATUS !!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ALL of the fixes described in this file are ALREADY APPLIED in this working copy.
+Another agent (Claude) implemented them and every touched file passes `node --check`.
+YOUR JOB IS NOT TO RE-APPLY THEM. Your job is to VERIFY the implementation against the
+acceptance criteria below, playtest, and finish the small leftover items listed in the
+"WHAT YOU MUST DO" section at the bottom of this file. Re-applying edits will cause
+duplicates/conflicts. Read the code first.
+
+Already implemented (do NOT redo):
+- js/world/props.js
+  * Truck: removed orphaned/broken duplicate define; proper P.define('truck', ...) exists.
+  * Floating parts fixed: rear bumper moved to G.box(0.6, 0.8, 2.3, -3.7, 1.0, 0),
+    hood is now G.box(2.0, 0.5, 2.25, 4.45, 1.65, 0), truckLights x 3.78 -> 3.75.
+- js/main.js (tick, ~line 55)
+  * Appended: if (FN.Training && FN.Training.active) FN.Training.update(dt);
+  * This is what makes the 8 invincible pacing dummies (and item bob/respawn) tick again.
+- js/game/training.js
+  * TR state now has targets:[] and vehicleLine:[].
+  * Constants: TARGET_COUNT=3, TARGET_RESPAWN=1.0, VEHICLE_LINE_X=SPAWN_X+24,
+    VEHICLE_LINE_Z0=SPAWN_Z-16, VEHICLE_SPACING=8.
+  * TR.buildTargets(): 3 static killable dummies (killable:true, team:99, health:100,
+    spawn saved in x0/z0) at VEHICLE_LINE_X-7, z = VEHICLE_LINE_Z0 + i*12, rotation.y = PI/2.
+  * TR.buildVehicles(): calls FN.Vehicles.init(), lines every drivable prop up in the
+    vertical line (x const, z spaced 8 m, rot = PI/2, re-grounded + writeInstance),
+    saves originals to TR.vehicleLine.
+  * TR.start() calls TR.buildItems(); TR.buildDummies(); TR.buildTargets(); TR.buildVehicles();
+  * TR.stop(): removes target chars, restores vehicle original positions + writeInstance.
+  * TR.update(): target block — dead dummies run the shared death FX (freeze -> blue grid ->
+    fade), then respawnT = 1.0 counted AFTER the FX ends, then respawn at x0/z0.
+  * TR.applyDummyDamage(): early-returns on dead; killable dummies lose real health; at <= 0
+    they die via FN.Character.beginDeath + death sound.
+- js/game/combat.js (3 places: CB.fire ~51, CB.updateProjectiles ~75, explosion ~104)
+  * Raycast entity list now also pushes FN.Training.targets (not just .dummies).
+
+Also already fixed in an earlier pass (same working copy, all verified with node --check):
+- js/models/character.js: shared death FX rebuilt (beginDeath/updateDeath/endDeath) —
+  1.5 s freeze + blue grid dissolve-in, 1.0 s hold, 0.4 s fade-out.
+- js/game/bots.js: dead bots run BOTS.updateDeathFx; mesh pool keeps dying bodies until FX
+  ends; endDeath on mesh reuse; glider detached on death.
+- js/game/player.js: PL.reset clears any mid-sequence death FX.
+- js/world/structures.js: gable/wedge roof-end walls use triangle-following collision strips
+  (invisible full-box roof walls removed).
+- js/world/vehicles.js: proper spawn-overlap logic (V.overlapsAny + V.findFreeSpot) —
+  vehicles only relocate when actually overlapping, never stack.
+
+
+PROJECT CONTEXT
+- Vanilla JS browser game, no build step. Scripts load via "Fortnite OG.html" in order.
+- Global namespace: window.FN. Key modules:
+  - js/world/props.js      -> instanced world props incl. vehicles ("car", "truck" defs; truckBody geo; FN.Props.writeInstance(p) syncs a prop's 3D instance)
+  - js/world/vehicles.js   -> FN.Vehicles.init() scans all drivable props into FN.Vehicles.list ({prop, def,...})
+  - js/game/training.js    -> Training mode (TR). Spawn area: SPAWN_X=0, SPAWN_Z=200
+  - js/game/combat.js      -> damage routing; CB.applyDamage delegates dummies to FN.Training.applyDummyDamage
+  - js/main.js             -> main loop tick() (~line 55 chains all per-frame updates)
+  - js/models/character.js -> shared death FX: FN.Character.beginDeath(ch) / updateDeath(ch,dt) returns true when done / endDeath(ch)
+    (sequence: 1.5s freeze + blue grid dissolve-in, 1.0s hold, 0.4s fade-out)
+- Style: dense one-line functions, ASCII comments, keep existing formatting. Do NOT refactor anything else.
+
+----------------------------------------
+1) TRUCK HAS FLOATING PARTS  (js/world/props.js, in the truckBody = G.merge([...]) list)
+Root causes (verified by geometry):
+- Rear bumper G.box(0.6, 0.8, 2.3, -4.3, 1.0, 0) spans x -4.6..-4.0, but the cargo box
+  spans x -3.55..1.95 -> 0.45 gap, bumper floats behind the truck.
+- Front hood block G.box(1.7, 0.5, 2.25, 4.6, 2.45, 0) spans x 3.75..5.45 at y 2.2..2.7,
+  but the cab spans x 1.5..3.7 with roof at y 1.9 -> no contact, floats above the cab.
+- Front lights at x=3.78 leave a 0.02 gap from the cab's front face (x=3.7).
+FIX (exact replacements):
+- Bumper:      G.box(0.6, 0.8, 2.3, -3.7, 1.0, 0)          // spans -4.0..-3.4, overlaps cargo by 0.15
+- Hood:        G.box(2.0, 0.5, 2.25, 4.45, 1.65, 0)         // spans 3.45..5.45 (overlaps cab 0.25), y 1.4..1.9 sits on cab roof
+- Lights:      change both x values 3.78 -> 3.75 in the truckLights merge
+Do not change anything else on the truck (keep shape { w:7.4, h:3.0, d:2.4 } and all other parts).
+
+----------------------------------------
+2) TRAINING MODE CHANGES  (js/game/training.js, plus 2 hooks)
+
+2a) ALL vehicles spawn in a vertical line
+Root cause: Training mode never calls FN.Vehicles.init(), so no drivable vehicles are registered.
+Add TR.buildVehicles() and call it from TR.start() right after TR.buildDummies():
+- FN.Vehicles.init();
+- For i-th entry v of FN.Vehicles.list, set v.prop:
+    x = SPAWN_X + 24            (constant -> vertical line)
+    z = (SPAWN_Z - 16) + i * 8  (8 m spacing fits the 7.4 m truck)
+    rot = Math.PI / 2           (nose-to-tail along the line)
+    y = FN.Terrain.heightAt(x, z) + v.def.groundOffset
+  then FN.Props.writeInstance(v.prop).
+- BEFORE repositioning, save {prop, x, z, rot, y} into TR.vehicleLine; in TR.stop() restore
+  all saved values and writeInstance each prop (so leaving training restores the world).
+
+2b) ADD 3 static, KILLABLE target dummies near the vehicles; respawn 1 s after death
+Add TR.buildTargets() and call it from TR.start() after TR.buildDummies():
+- 3 dummies at x = (SPAWN_X + 24) - 7, z = (SPAWN_Z - 16) + i * 12, group.rotation.y = Math.PI/2.
+- Each entry: { x0, z0 (spawn point), x, y, z, char (FN.Character.create(...), added to FN.Engine.scene),
+  health:100, hurt:0, dead:false, respawnT:0, isBot:false, isDummy:true, killable:true, team:99,
+  inv:FN.Inventory.create(), equip:{slot:0,item:null}, stats:{kills:0} }.
+Damage: TR.applyDummyDamage currently only flashes "hurt". Extend it:
+- Early-return if dummy.dead. After showing damage numbers: if dummy.killable -> dummy.health -= amount;
+  when health <= 0: set dead=true, health=0, call FN.Character.beginDeath(dummy.char), play FN.Audio.play('death', pos, 0.7).
+Update loop: in TR.update() add a block for TR.targets:
+- If dead and char.deathFx -> drive FN.Character.updateDeath(d.char, dt); when it returns true:
+  FN.Character.endDeath, hide group, d.respawnT = 1.0.
+- If dead and no deathFx -> count down respawnT; at <= 0: respawn AT THE SAVED SPOT (x0/z0),
+  reset health/hurt/dead, set group position/rotation, group.visible = true.
+- While alive: static stance only (FN.Character.animate with move:0, no position changes).
+Raycasts: in js/game/combat.js there are THREE places that push training dummies into the
+raycast entity list (CB.fire ~line 51, CB.updateProjectiles ~line 75, explosion ~line 104):
+  if (FN.Training && FN.Training.active) { for (const d of FN.Training.dummies) ents.push(d); }
+Add the same loop for FN.Training.targets in ALL THREE places, otherwise the dummies can't be shot.
+Respawn timing note: "1 second" is measured after the death FX fully finishes (~2.9 s after the
+killing blow + 1 s pause). This is required because the shared death animation owns the body.
+
+2c) THE INVINCIBLE PACING DUMMIES NEVER MOVE
+Root cause (verified): FN.Training.update(dt) is NEVER called from the main loop -- the dummies
+(and the item bob/respawn logic) never tick.
+Fix in js/main.js, tick(), the update chain (~line 55): after "... FN.Vehicles.update(dt);"
+append:  if (FN.Training && FN.Training.active) FN.Training.update(dt);
+This single hook makes the 8 invincible dummies pace again and must not affect normal matches.
+
+----------------------------------------
+ACCEPTANCE CRITERIA
+1. Truck: no visible gaps -- bumper touches cargo box, hood sits on cab roof, lights flush.
+2. Training: every drivable vehicle stands in one straight vertical line near the item row,
+   nose-to-tail, grounded, drivable; positions restore after leaving training.
+3. 3 static dummies next to the vehicle line: take damage numbers, die with the blue-grid
+   death animation, are unhittable while dead, respawn at their exact spot 1 s after the FX ends.
+4. The 8 invincible dummies pace back and forth again; items bob/respawn.
+5. Normal (non-training) gameplay unaffected.
+6. Run `node --check` on every edited file (props.js, main.js, combat.js, training.js) -- must pass.
+
+----------------------------------------
+WHAT YOU MUST DO (continue from here)
+1. VERIFY, do not re-apply: read the sections above in the code and confirm each change
+   exists and is wired correctly. Fix only what is actually broken or missing.
+2. Syntax-check ALL touched files with `node --check`: js/world/props.js, js/main.js,
+   js/game/combat.js, js/game/training.js, js/models/character.js, js/game/bots.js,
+   js/game/player.js, js/world/structures.js, js/world/vehicles.js.
+3. In-game playtest (open Fortnite OG.html -> TRAINING):
+   - The 8 invincible dummies pace back and forth; weapon/ammo items bob and respawn.
+   - Every drivable vehicle stands in one vertical line near the item row; each is drivable.
+   - Shoot one of the 3 static dummies: damage numbers appear; on 0 HP it dies with the
+     blue-grid death FX, cannot be hit while dead, and reappears at the same spot ~1 s
+     after its body finishes fading.
+   - Leave training: vehicle positions restore, no leftover dummies in the world.
+4. Known leftover items / possible polish (decide or implement if asked):
+   - Respawn timing is currently 1 s AFTER the death FX ends (~3.9 s after the killing
+     blow). If a literal 1 s after death is wanted, the FX must be cut short for these
+     dummies only.
+   - Melee: CB.harvestHit (pickaxe) raycasts FN.Match.entities only — training dummies
+     are NOT hittable with the pickaxe. Add training dummies/targets there too if wanted.
+   - If the map has many vehicles the vertical line gets long (8 m spacing each); consider
+     a cap or larger spacing if it looks bad in playtesting.
+5. This folder is NOT a git repository (git commands fail). Skip commit/push unless you
+   set one up yourself.
+
