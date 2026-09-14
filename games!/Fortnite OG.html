@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fortnite OG — Battle Royale (Season 1 recreation)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/hud.css">
+<link rel="stylesheet" href="css/lobby.css">
+<link rel="stylesheet" href="css/settings.css">
+<link rel="stylesheet" href="css/teamchat.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="launch"><div class="load-logo">FORTNITE</div><div class="load-sub">BATTLE ROYALE</div><div class="launch-btn">CLICK TO LAUNCH</div><div class="launch-note">OG Season 1 recreation &middot; runs entirely in your browser &middot; 100 players</div></div>
+<div id="loading" style="display:none"><div class="load-logo">FORTNITE</div><div class="load-sub">BATTLE ROYALE</div><div class="load-bar"><div id="load-fill"></div></div><div id="load-text">Loading...</div></div>
+<div id="ui"></div>
+<script src="js/lib/three.min.js"></script>
+<script src="js/core/util.js"></script>
+<script src="js/core/config.js"></script>
+<script src="js/core/input.js"></script>
+<script src="js/core/audio.js"></script>
+<script src="js/core/engine.js"></script>
+<script src="js/gfx/textures.js"></script>
+<script src="js/gfx/geoutil.js"></script>
+<script src="js/gfx/sky.js"></script>
+<script src="js/gfx/fx.js"></script>
+<script src="js/gfx/grass.js"></script>
+<script src="js/world/mapdata.js"></script>
+<script src="js/world/terrain.js"></script>
+<script src="js/world/structures.js"></script>
+<script src="js/world/props.js"></script>
+  <script src="js/world/vehicles.js"></script>
+<script src="js/world/pois.js"></script>
+<script src="js/world/world.js"></script>
+<script src="js/models/character.js"></script>
+<script src="js/models/weapons.js"></script>
+<script src="js/models/items.js"></script>
+<script src="js/game/physics.js"></script>
+<script src="js/game/inventory.js"></script>
+<script src="js/game/loot.js"></script>
+<script src="js/game/combat.js"></script>
+<script src="js/game/build.js"></script>
+<script src="js/game/player.js"></script>
+<script src="js/game/storm.js"></script>
+<script src="js/game/bots.js"></script>
+<script src="js/game/match.js"></script>
+<script src="js/game/training.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/lobby.js"></script>
+<script src="js/ui/settings.js"></script>
+<script src="js/ui/teamchat.js"></script>
+<script src="js/main.js"></script>
+<script>
+// Packaging guard: if the game files next to this page did not load (almost always because the
+// ZIP was opened without extracting it first), explain what to do instead of showing a blank page.
+(function () {
+  if (window.THREE) return;
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:#0b0f16;color:#fff;' +
+    'font:16px/1.55 "Segoe UI",Arial,sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px';
+  d.innerHTML = '<div style="max-width:600px">' +
+    '<div style="font-size:30px;font-weight:700;margin-bottom:14px">Almost there!</div>' +
+    '<p style="margin:0 0 12px">The game files that belong next to this page could not be loaded. ' +
+    'That usually means the ZIP was opened without being extracted first.</p>' +
+    '<p style="margin:0 0 12px"><b>Fix:</b> right-click the ZIP file and choose <b>Extract All&hellip;</b> ' +
+    '(on a Mac, double-click the ZIP), then open <b>Fortnite OG.html</b> inside the extracted folder.</p>' +
+    '<p style="margin:0;opacity:.7">Chrome or Edge recommended.</p></div>';
+  document.body.appendChild(d);
+})();
+</script>
+</body>
+</html>

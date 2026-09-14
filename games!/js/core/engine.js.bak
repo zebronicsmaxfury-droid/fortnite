@@ -1,0 +1,41 @@
+// Renderer, scene, camera, main loop.
+window.FN = window.FN || {};
+(function () {
+  const E = { time: 0, frame: 0, fps: 0, dtAvg: 0.016, quality: { shadows: true, pixelRatio: 1 }, renderScene: null };
+  E.init = function () {
+    const canvas = document.getElementById('game');
+    E.canvas = canvas;
+    E.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+    E.renderer.setPixelRatio(1);
+    E.renderer.shadowMap.enabled = false; E.renderer.shadowMap.type = THREE.PCFShadowMap;
+    E.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    E.renderer.toneMapping = THREE.NoToneMapping;
+    E.scene = new THREE.Scene();
+    E.camera = new THREE.PerspectiveCamera(FN.CONFIG.CAMERA.FOV, 1, 0.1, 5000);
+    E.scene.add(E.camera);
+    E.resize();
+    window.addEventListener('resize', E.resize);
+    E.clock = performance.now();
+    E._fpsAcc = 0; E._fpsN = 0;
+  };
+  E.resize = function () {
+    const w = window.innerWidth, h = window.innerHeight;
+    E.renderer.setSize(w, h, false); E.camera.aspect = w / h; E.camera.updateProjectionMatrix();
+  };
+  E.setShadows = function (on) { E.quality.shadows = on; E.renderer.shadowMap.enabled = on; if (FN.Sky && FN.Sky.sun) FN.Sky.sun.castShadow = on; E.scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); };
+  E.start = function (tick) {
+    E.tick = tick;
+    const loop = () => {
+      const now = performance.now(); let dt = (now - E.clock) / 1000; E.clock = now;
+      if (dt > 0.1) dt = 0.1; if (dt <= 0) dt = 0.001; if (E.fixedDt) dt = E.fixedDt;
+      E.time += dt; E.frame++;
+      E._fpsAcc += dt; E._fpsN++; if (E._fpsAcc >= 0.5) { E.fps = Math.round(E._fpsN / E._fpsAcc); E._fpsAcc = 0; E._fpsN = 0; }
+      E.dtAvg = E.dtAvg * 0.95 + dt * 0.05;
+      try { E.tick(dt); } catch (err) { console.error('tick error', err); }
+      if (!E.renderSkip || E.frame % E.renderSkip === 0) E.renderer.render(E.renderScene || E.scene, E.camera);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  };
+  FN.Engine = E;
+})();

@@ -1,0 +1,12 @@
+#team-chat { position: fixed; left: 18px; top: 50%; transform: translateY(-50%); width: min(420px, calc(100vw - 36px)); max-height: 430px; display: none; flex-direction: column; z-index: 80; color: #fff; background: rgba(8,13,24,.94); border: 2px solid rgba(79,195,255,.85); border-radius: 5px; box-shadow: 0 5px 24px rgba(0,0,0,.5); font: 15px/1.35 Arial,sans-serif; pointer-events: auto; }
+.tc-head { display:flex; justify-content:space-between; padding:9px 12px; color:#4fc3ff; font-weight:bold; letter-spacing:1px; border-bottom:1px solid rgba(255,255,255,.18); }
+.tc-hint { color:rgba(255,255,255,.55); font-size:11px; letter-spacing:0; font-weight:normal; }
+.tc-log { min-height:110px; max-height:340px; overflow-y:auto; padding:8px 10px; }
+.tc-line { margin:4px 0; overflow-wrap:anywhere; }
+.tc-line.user .tc-name { color:#ffd23d; } .tc-line.bot .tc-name { color:#4fc3ff; }
+.tc-name { display:inline-block; min-width:92px; margin-right:7px; font-weight:bold; }
+.tc-text { color:rgba(255,255,255,.94); }
+.tc-form { display:flex; align-items:center; padding:8px 10px; border-top:1px solid rgba(255,255,255,.18); }
+.tc-prompt { color:#4fc3ff; font-weight:bold; margin-right:7px; }
+.tc-input { flex:1; min-width:0; color:#fff; background:rgba(0,0,0,.32); border:1px solid rgba(255,255,255,.3); border-radius:3px; outline:none; padding:7px 8px; font:inherit; }
+.tc-input:focus { border-color:#4fc3ff; box-shadow:0 0 0 1px rgba(79,195,255,.3); }
