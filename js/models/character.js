@@ -112,6 +112,9 @@ window.FN = window.FN || {};
     const ch = { group, mesh: bones.root, bones, skin: sk, socket, wsocket, backSocket, anim: { phase: 0 }, targets: {}, weaponMesh: null, weaponKind: 'none', grip: null, aimF: 0, shootAnim: { kind: 'none', t: 0, dur: 0, hold: false } };
     ch.bodyMat = mat;
     ch.grids = grids;
+    ch.drone = buildDroneMesh(); // elimination hologram drone (hidden until death)
+    ch.drone.visible = false;
+    group.add(ch.drone);
     for (const n of BONES) ch.targets[n] = new THREE.Euler();
     ch.headWorld = new THREE.Vector3();
     return ch;
@@ -526,6 +529,43 @@ window.FN = window.FN || {};
     }
   };
   CH.headPos = function (ch, out) { ch.bones.head.getWorldPosition(out || ch.headWorld); return out || ch.headWorld; };
+
+  // Elimination hologram drone: quad body + projector beam + floating scan cubes.
+  // Hidden until death; fades in together with the blue grid overlay (like Fortnite).
+  function buildDroneMesh() {
+    const g = new THREE.Group();
+    const mats = [];
+    const addMat = (m, base) => { m.transparent = true; m.opacity = 0; m.depthWrite = false; m.userData.base = base; mats.push(m); return m; };
+    const bodyMat = addMat(new THREE.MeshLambertMaterial({ color: 0x39424e }), 1);
+    const armsMat = bodyMat;
+    const body = new THREE.Mesh(G.box(0.5, 0.16, 0.5), bodyMat);
+    const arms = new THREE.Mesh(G.merge([G.box(0.95, 0.05, 0.08, 0, 0.02, 0.24), G.box(0.95, 0.05, 0.08, 0, 0.02, -0.24), G.box(0.08, 0.05, 0.95, 0.24, 0.06, 0), G.box(0.08, 0.05, 0.95, -0.24, 0.06, 0)]), armsMat);
+    const drone = new THREE.Group(); drone.add(body); drone.add(arms);
+    const props = [];
+    for (const s of [[0.45, 0.45], [-0.45, 0.45], [0.45, -0.45], [-0.45, -0.45]]) {
+      const pm = addMat(new THREE.MeshBasicMaterial({ color: 0xbfdcff }), 0.9);
+      const rotor = new THREE.Mesh(G.cyl(0.24, 0.24, 0.03, 10, 0, 0, 0), pm); rotor.position.set(s[0], 0.1, s[1]);
+      props.push(rotor); drone.add(rotor);
+    }
+    const lamp = new THREE.Mesh(G.sphere(0.09, 8, 0, -0.12, 0), addMat(new THREE.MeshBasicMaterial({ color: 0xd8efff }), 1));
+    drone.add(lamp);
+    drone.position.set(0, 3.05, 0.35); drone.rotation.x = -0.15;
+    g.add(drone);
+    // projector beam: narrow at the drone, wide over the body
+    const beamMat = addMat(new THREE.MeshBasicMaterial({ color: 0x7ec8ff, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }), 0.55);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 1.55, 2.75, 20, 1, true), beamMat);
+    beam.position.set(0, 1.62, 0.18); beam.renderOrder = 6;
+    g.add(beam);
+    // floating scan cubes around the body
+    const cubeMat = addMat(new THREE.MeshBasicMaterial({ color: 0x9fdcff, blending: THREE.AdditiveBlending }), 0.95);
+    const cubes = [];
+    for (const c of [[-0.55, 1.35, 0.1], [0.5, 1.7, -0.15], [0.15, 1.05, 0.45], [-0.3, 1.85, -0.4]]) {
+      const cube = new THREE.Mesh(G.box(0.14, 0.14, 0.14), cubeMat); cube.position.set(c[0], c[1], c[2]); cube.renderOrder = 6;
+      cubes.push(cube); g.add(cube);
+    }
+    g.userData = { mats, props, drone, cubes, beam };
+    return g;
+  }
 
   // ---------- death FX (identical code path for player and bots) ----------
   // Phase A (1.5s): body frozen at the exact death pose; original colors fade
